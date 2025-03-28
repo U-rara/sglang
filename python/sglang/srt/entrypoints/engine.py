@@ -287,14 +287,21 @@ class Engine:
 
     def update_weights_from_tensor(
         self,
-        named_tensors: List[Tuple[str, torch.Tensor]],
+        named_tensors: Union[List[Tuple[str, torch.Tensor]], List[bytes]],
         load_format: Optional[str] = None,
         flush_cache: bool = True,
     ):
         """Update weights from distributed source. If there are going to be more updates, set `flush_cache` to be true
         to avoid duplicated operations such as clearing cache."""
+        if isinstance(named_tensors[0], bytes):
+            serialized_named_tensors = named_tensors
+        else:
+            serialized_named_tensors = [
+                MultiprocessingSerializer.serialize(named_tensor)
+                for named_tensor in named_tensors
+            ]
         obj = UpdateWeightsFromTensorReqInput(
-            serialized_named_tensors=MultiprocessingSerializer.serialize(named_tensors),
+            serialized_named_tensors=serialized_named_tensors,
             load_format=load_format,
             flush_cache=flush_cache,
         )
@@ -302,6 +309,27 @@ class Engine:
         return loop.run_until_complete(
             self.tokenizer_manager.update_weights_from_tensor(obj, None)
         )
+
+    async def async_update_weights_from_tensor(
+        self,
+        named_tensors: Union[List[Tuple[str, "torch.Tensor"]], List[bytes]],
+        load_format: Optional[str] = None,
+        flush_cache: bool = True,
+    ):
+        if isinstance(named_tensors[0], bytes):
+            serialized_named_tensors = named_tensors
+        else:
+            serialized_named_tensors = [
+                MultiprocessingSerializer.serialize(named_tensor)
+                for named_tensor in named_tensors
+            ]
+        obj = UpdateWeightsFromTensorReqInput(
+            serialized_named_tensors=serialized_named_tensors,
+            load_format=load_format,
+            flush_cache=flush_cache,
+        )
+        return await self.tokenizer_manager.update_weights_from_tensor(obj, None)
+
 
     def update_weights_from_disk(
         self,
@@ -340,6 +368,10 @@ class Engine:
             self.tokenizer_manager.release_memory_occupation(obj, None)
         )
 
+    async def async_release_memory_occupation(self):
+        obj = ReleaseMemoryOccupationReqInput()
+        return await self.tokenizer_manager.release_memory_occupation(obj, None)
+
     def resume_memory_occupation(self):
         """Resume GPU occupation."""
         obj = ResumeMemoryOccupationReqInput()
@@ -347,6 +379,10 @@ class Engine:
         return loop.run_until_complete(
             self.tokenizer_manager.resume_memory_occupation(obj, None)
         )
+
+    async def async_resume_memory_occupation(self):
+        obj = ResumeMemoryOccupationReqInput()
+        return await self.tokenizer_manager.resume_memory_occupation(obj, None)
 
 
 def _set_envs_and_config(server_args: ServerArgs):
